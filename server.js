@@ -1,46 +1,32 @@
-const express = require('express');
-const multer = require('multer');
-const fs = require('fs');
-const { exec } = require('child_process');
-const path = require('path');
+// server.js
+const express = require("express");
+const bodyParser = require("body-parser");
+const { exec } = require("child_process");
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+app.use(bodyParser.json());
 
-app.post('/create-video', upload.array('images'), async (req, res) => {
-  try {
-    const imageFiles = req.files;
-    const outputPath = `output_${Date.now()}.mp4`;
-    const tempDir = `uploads/${Date.now()}`;
-    fs.mkdirSync(tempDir);
+app.post("/api/render", (req, res) => {
+  const { imagePattern, audioPath, subtitlePath, outputPath } = req.body;
 
-    // Rename files to consistent names
-    imageFiles.forEach((file, index) => {
-      const newPath = `${tempDir}/img${String(index).padStart(3, '0')}.jpg`;
-      fs.renameSync(file.path, newPath);
-    });
-
-    // FFmpeg command to create video
-    const command = `ffmpeg -framerate 1 -i ${tempDir}/img%03d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p ${outputPath}`;
-
-    exec(command, (error) => {
-      if (error) {
-        console.error(error);
-        return res.status(500).send('FFmpeg error');
-      }
-
-      res.download(outputPath, () => {
-        // Clean up
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        fs.unlinkSync(outputPath);
-      });
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Internal Server Error');
+  if (!imagePattern || !audioPath || !subtitlePath || !outputPath) {
+    return res
+      .status(400)
+      .json({ error: "Missing required paths in request body." });
   }
+
+  const ffmpegCmd = `ffmpeg -y -framerate 0.2 -i ${imagePattern} -i ${audioPath} -vf "subtitles=${subtitlePath}" -c:v libx264 -r 30 -pix_fmt yuv420p -c:a aac -shortest ${outputPath}`;
+
+  exec(ffmpegCmd, (err, stdout, stderr) => {
+    if (err) {
+      console.error(stderr);
+      return res
+        .status(500)
+        .json({ error: "FFmpeg execution failed.", details: stderr });
+    }
+    res.json({ message: "Video created successfully", output: outputPath });
+  });
 });
 
-app.listen(3000, () => {
-  console.log('Server running on port 3000');
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`FFmpeg server running on port ${PORT}`));
