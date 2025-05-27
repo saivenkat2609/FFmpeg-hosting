@@ -3,7 +3,7 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const { exec } = require("child_process");
+const { exec ,spawn} = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 
 const app = express();
@@ -32,6 +32,9 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+app.get('/test', (req, res) => {
+  res.send('Hello from Node!');
+});
 
 app.post(
   "/convert",
@@ -58,7 +61,38 @@ app.post(
     });
   }
 );
+app.get("/download", async (req, res) => {
+  const videoUrl = req.query.video_url;
+  if (!videoUrl) {
+    return res.status(400).json({ error: "Missing video_url query param" });
+  }
 
+  const outputFile = "/tmp/audio.mp3";
+  const ytdlp = spawn("yt-dlp", [
+    "-x",
+    "--audio-format", "mp3",
+    "-o", "/tmp/audio.%(ext)s",
+    videoUrl
+  ]);
+
+  ytdlp.stderr.on("data", (data) => {
+    console.error(`stderr: ${data}`);
+  });
+
+  ytdlp.on("close", (code) => {
+    if (code !== 0) {
+      return res.status(500).json({ error: "yt-dlp failed" });
+    }
+
+    fs.readFile(outputFile, (err, data) => {
+      if (err) return res.status(500).send("Failed to read audio file");
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Disposition", "attachment; filename=audio.mp3");
+      res.send(data);
+      fs.unlink(outputFile, () => {}); // Clean up
+    });
+  });
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
