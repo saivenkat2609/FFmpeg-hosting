@@ -1,46 +1,64 @@
 // server.js
-const express = require('express');
-const multer = require('multer');
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
+const { exec } = require("child_process");
+const { v4: uuidv4 } = require("uuid");
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const PORT = 3000;
 
-app.post('/api/render', upload.fields([
-  { name: 'images', maxCount: 100 },
-  { name: 'audio', maxCount: 1 },
-  { name: 'subtitles', maxCount: 1 }
-]), (req, res) => {
-  const images = req.files['images'];
-  const audio = req.files['audio']?.[0];
-  const subtitles = req.files['subtitles']?.[0];
-
-  if (!images || !audio || !subtitles) {
-    return res.status(400).json({ error: 'Missing images, audio, or subtitles.' });
-  }
-
-  // Sort image files by filename
-  const sortedImages = images.sort((a, b) => a.originalname.localeCompare(b.originalname));
-  const imageListPath = 'uploads/image_list.txt';
-  const outputPath = `uploads/output_${Date.now()}.mp4`;
-
-  // Create an image list file for ffmpeg
-  const imageList = sortedImages.map(file => `file '${file.path}'\nduration 5`).join('\n');
-  fs.writeFileSync(imageListPath, imageList);
-
-  const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i ${imageListPath} -i ${audio.path} -vf subtitles=${subtitles.path} -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${outputPath}`;
-
-  exec(ffmpegCmd, (err, stdout, stderr) => {
-    if (err) {
-      console.error(stderr);
-      return res.status(500).json({ error: 'FFmpeg failed', details: stderr });
+// Multer setup to store files in a temporary UUID-based directory
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!req.tempDir) {
+      req.tempDir = path.join(__dirname, "uploads", uuidv4());
+      fs.mkdirSync(req.tempDir, { recursive: true });
     }
-    res.download(outputPath);
-  });
+    cb(null, req.tempDir);
+  },
+  filename: (req, file, cb) => {
+    if (file.fieldname === "images") {
+      const idx = (req.imageIndex = req.imageIndex || 1);
+      cb(null, `frame${idx}.png`);
+      req.imageIndex++;
+    } else if (file.fieldname === "audio") {
+      cb(null, "audio.mp3");
+    } else if (file.fieldname === "subtitles") {
+      cb(null, "subtitles.srt");
+    }
+  },
 });
 
-app.listen(3000, () => {
-  console.log('FFmpeg API server listening on port 3000');
+const upload = multer({ storage });
+
+app.post(
+  "/convert",
+  upload.fields([
+    { name: "images", maxCount: 100 },
+    { name: "audio", maxCount: 1 },
+    { name: "subtitles", maxCount: 1 },
+  ]),
+  (req, res) => {
+    const dir = req.tempDir;
+    const outputPath = path.join(dir, "output.mp4");
+
+    const command = `ffmpeg -y -framerate 0.2 -i ${dir}/frame%d.png -i ${dir}/audio.mp3 -vf "subtitles=${dir}/subtitles.srt" -c:v libx264 -r 30 -pix_fmt yuv420p -c:a aac -shortest ${outputPath}`;
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error("FFmpeg Error:", stderr);
+        return res.status(500).send("FFmpeg processing failed.");
+      }
+
+      res.download(outputPath, "output.mp4", (err) => {
+        fs.rmSync(dir, { recursive: true, force: true }); // Clean up
+      });
+    });
+  }
+);
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
