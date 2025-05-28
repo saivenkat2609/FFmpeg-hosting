@@ -97,7 +97,7 @@ app.post("/download", async (req, res) => {
     }
 
     // Use a unique temp directory
-    const tempDir = path.join(__dirname, "downloads", uuidv4());
+    const tempDir = path.join("/tmp", "downloads", uuidv4());
     fs.mkdirSync(tempDir, { recursive: true });
     const outputFile = path.join(tempDir, "audio.mp3");
 
