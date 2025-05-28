@@ -38,7 +38,14 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+let YT_COOKIES_PATH = null;
 
+if (process.env.YTDLP_COOKIES_BASE64) {
+  const decoded = Buffer.from(process.env.YTDLP_COOKIES_BASE64, "base64").toString("utf-8");
+  const tmpPath = "/tmp/youtube_cookies.txt";
+  fs.writeFileSync(tmpPath, decoded);
+  YT_COOKIES_PATH = tmpPath;
+}
 app.get("/test", (req, res) => {
   res.send("Hello from Node!");
 });
@@ -96,21 +103,19 @@ app.post("/download", async (req, res) => {
       return res.status(400).json({ error: "Missing video_url in body" });
     }
 
-    // Use a unique temp directory
     const tempDir = path.join("/tmp", "downloads", uuidv4());
     fs.mkdirSync(tempDir, { recursive: true });
     const outputFile = path.join(tempDir, "audio.mp3");
-    exec("yt-dlp --version", (err, stdout, stderr) => {
-      console.log("yt-dlp version:", stdout || stderr || err);
-    });
-    const ytdlp = spawn("yt-dlp", [
-      "-x",
-      "--audio-format",
-      "mp3",
-      "-o",
-      `${tempDir}/audio.%(ext)s`,
-      videoUrl,
-    ]);
+
+    const args = [];
+
+    if (YT_COOKIES_PATH) {
+      args.push("--cookies", YT_COOKIES_PATH);
+    }
+
+    args.push("-x", "--audio-format", "mp3", "-o", `${tempDir}/audio.%(ext)s`, videoUrl);
+
+    const ytdlp = spawn("yt-dlp", args);
 
     ytdlp.stderr.on("data", (data) => {
       console.error(`yt-dlp stderr: ${data}`);
@@ -123,9 +128,7 @@ app.post("/download", async (req, res) => {
 
     ytdlp.on("close", (code) => {
       if (code !== 0) {
-        return res
-          .status(500)
-          .json({ error: "yt-dlp failed to download audio" });
+        return res.status(500).json({ error: "yt-dlp failed to download audio" });
       }
 
       fs.readFile(outputFile, (err, data) => {
@@ -138,7 +141,7 @@ app.post("/download", async (req, res) => {
         res.setHeader("Content-Disposition", "attachment; filename=audio.mp3");
         res.send(data);
 
-        // Clean up
+        // Clean up temp directory
         fs.rm(tempDir, { recursive: true, force: true }, (cleanupErr) => {
           if (cleanupErr) {
             console.error("Cleanup error:", cleanupErr);
