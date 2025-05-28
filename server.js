@@ -54,7 +54,7 @@ app.post(
   ]),
   (req, res) => {
     const files = req.files;
-    const dir = req.tempDir; // Use the tempDir created by multer storage
+    const dir = "/tmp"; // Use the tempDir created by multer storage
 
     if (!files || !files.images || !files.audio) {
       return res.status(400).send("Images and audio are required.");
