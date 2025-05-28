@@ -20,7 +20,6 @@ RUN npm ci --omit=dev
 # Copy rest of the app
 COPY . .
 # After copying source files
-COPY cookies.txt ./cookies.txt
 
 # Expose the app port
 EXPOSE 3000
