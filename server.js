@@ -106,7 +106,7 @@ app.post("/download", async (req, res) => {
       "--audio-format",
       "mp3",
       "-o",
-      path.join(tempDir, "audio.%(ext)s"),
+      `${tempDir}/audio.%(ext)s`,
       videoUrl,
     ]);
 
