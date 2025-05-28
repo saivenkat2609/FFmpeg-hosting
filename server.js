@@ -100,7 +100,9 @@ app.post("/download", async (req, res) => {
     const tempDir = path.join("/tmp", "downloads", uuidv4());
     fs.mkdirSync(tempDir, { recursive: true });
     const outputFile = path.join(tempDir, "audio.mp3");
-
+    exec("yt-dlp --version", (err, stdout, stderr) => {
+      console.log("yt-dlp version:", stdout || stderr || err);
+    });
     const ytdlp = spawn("yt-dlp", [
       "-x",
       "--audio-format",
