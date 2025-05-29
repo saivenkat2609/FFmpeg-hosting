@@ -93,7 +93,7 @@ app.post("/download", async (req, res) => {
     const options = {
       method: "GET",
       url: "https://youtube-mp36.p.rapidapi.com/dl",
-      params: { id: req.id },
+      params: { id: req.body.id },
       headers: {
         "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944", // Use env variable
         "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
@@ -112,7 +112,7 @@ app.post("/download", async (req, res) => {
   }
 });
 app.get("/audiob64", async (req, res) => {
-  const fileUrl = req.link;
+  const fileUrl = req.body.link;
 
   if (!fileUrl) {
     console.error("No file URL returned from RapidAPI");
