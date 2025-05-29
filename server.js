@@ -129,6 +129,8 @@ app.post("/audiob64", async (req, res) => {
       timeout: 20000,
       headers: {
         "User-Agent": "Mozilla/5.0",
+        Accept: "*/*",
+        Referer: "https://google.com",
       },
     });
 
@@ -156,6 +158,11 @@ app.post("/audiob64", async (req, res) => {
     response.data.pipe(base64Stream).pipe(pass);
   } catch (err) {
     console.error("Streaming error:", err.message);
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Headers:", err.response.headers);
+      console.error("Data:", err.response.data);
+    }
     return res.status(500).json({ error: "Failed to fetch and stream audio" });
   }
 });
