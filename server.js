@@ -128,9 +128,12 @@ app.post("/audiob64", async (req, res) => {
       responseType: "stream",
       timeout: 20000,
       headers: {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
         Accept: "*/*",
-        Referer: "https://google.com",
+        "Accept-Language": "en-US,en;q=0.9",
+        Referer: "https://123tokyo.xyz", // guess based on domain
+        Origin: "https://123tokyo.xyz",
       },
     });
 
