@@ -3,14 +3,17 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const { exec, spawn } = require("child_process");
+const { exec } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 const bodyParser = require("body-parser");
-const app = express();
+const { Base64Encode } = require("base64-stream");
+const { PassThrough } = require("stream");
 const PORT = 3000;
-const http = require("https");
 const axios = require("axios");
-const stream = require("stream");
+const cors = require("cors");
+const app = express();
+
+app.use(cors());
 // Add these lines:
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -98,11 +101,12 @@ app.post("/download", async (req, res) => {
         "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944", // Use env variable
         "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
       },
-      timeout: 10000, // 10 seconds
+      // timeout: 10000, // 10 seconds
     };
 
     const apiResponse = await axios.request(options);
-    return apiResponse.data.link;
+    // Send the link as a JSON response
+    res.json({ link: apiResponse.data.link });
   } catch (error) {
     console.error("Error in /download:", error.message);
     res.status(500).json({
@@ -111,36 +115,51 @@ app.post("/download", async (req, res) => {
     });
   }
 });
-app.get("/audiob64", async (req, res) => {
+app.post("/audiob64", async (req, res) => {
   const fileUrl = req.body.link;
-
   if (!fileUrl) {
-    console.error("No file URL returned from RapidAPI");
-    return res.status(500).json({ error: "No file URL returned from API" });
+    return res.status(400).json({ error: "Missing audio file URL" });
   }
 
-  console.log("Fetching audio file from:", fileUrl);
+  try {
+    const response = await axios({
+      method: "get",
+      url: fileUrl,
+      responseType: "stream",
+      timeout: 20000,
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+      },
+    });
 
-  const audioResponse = await axios.get(fileUrl, {
-    responseType: "arraybuffer",
-    timeout: 20000, // 20 seconds max
-    headers: {
-      "User-Agent": "Mozilla/5.0", // mimic browser
-    },
-  });
+    const mimeType = response.headers["content-type"] || "audio/mpeg";
 
-  const mimeType = audioResponse.headers["content-type"] || "audio/mpeg";
-  const base64Audio = Buffer.from(audioResponse.data, "binary").toString(
-    "base64"
-  );
-  const dataUri = `data:${mimeType};base64,${base64Audio}`;
+    // Create a stream that converts binary to base64
+    const base64Stream = new Base64Encode();
 
-  res.json({
-    mimeType,
-    base64: base64Audio,
-    dataUri, // optional
-  });
+    let base64Data = "";
+    const pass = new PassThrough();
+
+    pass.on("data", (chunk) => {
+      base64Data += chunk.toString();
+    });
+
+    pass.on("end", () => {
+      res.json({
+        mimeType,
+        base64: base64Data,
+        dataUri: `data:${mimeType};base64,${base64Data}`,
+      });
+    });
+
+    // Pipe the response stream through base64 encoder into collector
+    response.data.pipe(base64Stream).pipe(pass);
+  } catch (err) {
+    console.error("Streaming error:", err.message);
+    return res.status(500).json({ error: "Failed to fetch and stream audio" });
+  }
 });
+
 app.post("/create-video", async (req, res) => {
   try {
     const { audio, subtitles } = req.body;
