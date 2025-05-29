@@ -15,6 +15,8 @@ const stream = require("stream");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(express.json({ limit: '100mb' })); // Handle large base64 audio & subtitle input
+
 // Multer setup to store files in a temporary UUID-based directory
 const TEMP_ROOT = "/tmp";
 
@@ -40,23 +42,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-let YT_COOKIES_PATH = null;
 
-if (process.env.YTDLP_COOKIES_BASE64) {
-  const decoded = Buffer.from(
-    process.env.YTDLP_COOKIES_BASE64,
-    "base64"
-  ).toString("utf-8");
-  const tmpPath = "/tmp/youtube_cookies.txt";
-  fs.writeFileSync(tmpPath, decoded);
-  YT_COOKIES_PATH = tmpPath;
-}
-app.get("/test", (req, res) => {
-  res.send("Hello from Node!");
-});
-app.get("/getTest", (req, res) => {
-  res.send("Hello from Node!");
-});
 app.post(
   "/convert",
   upload.fields([
@@ -124,26 +110,77 @@ app.post("/download", async (req, res) => {
 
   await fetchData();
   const response = await axios.get(fileUrl, {
-      responseType: 'arraybuffer',
-    });
+    responseType: "arraybuffer",
+  });
 
-    const mimeType = response.headers['content-type'] || 'audio/mpeg';
-    const base64Audio = Buffer.from(response.data, 'binary').toString('base64');
+  const mimeType = response.headers["content-type"] || "audio/mpeg";
+  const base64Audio = Buffer.from(response.data, "binary").toString("base64");
 
-    // Create a data URI (optional)
-    const dataUri = `data:${mimeType};base64,${base64Audio}`;
+  // Create a data URI (optional)
+  const dataUri = `data:${mimeType};base64,${base64Audio}`;
 
-    res.json({
-      mimeType,
-      base64: base64Audio,
-      dataUri, // optional: useful if you want to use it in an <audio> tag
-    });
-    return res
+  res.json({
+    mimeType,
+    base64: base64Audio,
+    dataUri, // optional: useful if you want to use it in an <audio> tag
+  });
+  return res;
 });
 
-app.post("/postTest", (req, res) => {
-  console.log("dgdfgd");
-  return res;
+app.post('/create-video', async (req, res) => {
+  try {
+    const { audio, subtitles } = req.body;
+
+    if (!audio || !subtitles) {
+      return res.status(400).json({ error: 'Missing audio or subtitles' });
+    }
+
+    // Save audio to file
+    const audioPath = `uploads/audio_${Date.now()}.mp3`;
+    const audioBuffer = Buffer.from(audio, 'base64');
+    fs.writeFileSync(audioPath, audioBuffer);
+
+    // Save subtitles to .srt file
+    const subtitlePath = `uploads/subs_${Date.now()}.srt`;
+    fs.writeFileSync(subtitlePath, subtitles.replace(/\\n/g, '\n'));
+
+    // Define output path
+    const outputPath = `uploads/output_${Date.now()}.mp4`;
+
+    // Use FFmpeg to generate video
+    ffmpeg()
+      .input('color=black:s=1280x720:d=600') // Adjust d=600 or use -shortest to clip to audio length
+      .inputFormat('lavfi')
+      .input(audioPath)
+      .input(subtitlePath)
+      .complexFilter([
+        {
+          filter: 'subtitles',
+          options: subtitlePath,
+        },
+      ])
+      .outputOptions('-shortest') // Trim video to shortest input
+      .output(outputPath)
+      .on('end', () => {
+        const videoBuffer = fs.readFileSync(outputPath);
+        const videoBase64 = videoBuffer.toString('base64');
+
+        // Clean up
+        fs.unlinkSync(audioPath);
+        fs.unlinkSync(subtitlePath);
+        fs.unlinkSync(outputPath);
+
+        res.json({ video: videoBase64 });
+      })
+      .on('error', (err) => {
+        console.error('FFmpeg error:', err);
+        res.status(500).json({ error: 'Video creation failed' });
+      })
+      .run();
+  } catch (err) {
+    console.error('Server error:', err);
+    res.status(500).json({ error: 'Unexpected server error' });
+  }
 });
 
 app.listen(PORT, () => {
