@@ -87,44 +87,52 @@ app.post(
   }
 );
 app.post("/download", async (req, res) => {
-  let fileUrl;
-  const options = {
-    method: "GET",
-    url: "https://youtube-mp36.p.rapidapi.com/dl",
-    params: { id: "UxxajLWwzqY" },
-    headers: {
-      "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944",
-      "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
-    },
-  };
+  try {
+    console.log("Calling RapidAPI to get download link...");
+    
+    const options = {
+      method: "GET",
+      url: "https://youtube-mp36.p.rapidapi.com/dl",
+      params: { id: "UxxajLWwzqY" },
+      headers: {
+        "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944",
+        "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
+      },
+      timeout: 10000, // 10 seconds
+    };
 
-  async function fetchData() {
-    try {
-      const response = await axios.request(options);
-      fileUrl = response.data.link;
-      console.log(response.data);
-    } catch (error) {
-      console.error(error);
+    const apiResponse = await axios.request(options);
+    const fileUrl = apiResponse.data.link;
+
+    if (!fileUrl) {
+      console.error("No file URL returned from RapidAPI");
+      return res.status(500).json({ error: "No file URL returned from API" });
     }
+
+    console.log("Fetching audio file from:", fileUrl);
+
+    const audioResponse = await axios.get(fileUrl, {
+      responseType: "arraybuffer",
+      timeout: 20000, // 20 seconds max
+    });
+
+    const mimeType = audioResponse.headers["content-type"] || "audio/mpeg";
+    const base64Audio = Buffer.from(audioResponse.data, "binary").toString("base64");
+    const dataUri = `data:${mimeType};base64,${base64Audio}`;
+
+    res.json({
+      mimeType,
+      base64: base64Audio,
+      dataUri, // optional
+    });
+
+  } catch (error) {
+    console.error("Error in /download:", error.message);
+    res.status(500).json({
+      error: "Something went wrong",
+      details: error.message,
+    });
   }
-
-  await fetchData();
-  const response = await axios.get(fileUrl, {
-    responseType: "arraybuffer",
-  });
-
-  const mimeType = response.headers["content-type"] || "audio/mpeg";
-  const base64Audio = Buffer.from(response.data, "binary").toString("base64");
-
-  // Create a data URI (optional)
-  const dataUri = `data:${mimeType};base64,${base64Audio}`;
-
-  res.json({
-    mimeType,
-    base64: base64Audio,
-    dataUri, // optional: useful if you want to use it in an <audio> tag
-  });
-  return res;
 });
 
 app.post('/create-video', async (req, res) => {
