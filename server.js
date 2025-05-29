@@ -8,7 +8,9 @@ const { v4: uuidv4 } = require("uuid");
 const bodyParser = require("body-parser");
 const app = express();
 const PORT = 3000;
-
+const http = require("https");
+const axios = require("axios");
+const stream = require("stream");
 // Add these lines:
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -41,7 +43,10 @@ const upload = multer({ storage });
 let YT_COOKIES_PATH = null;
 
 if (process.env.YTDLP_COOKIES_BASE64) {
-  const decoded = Buffer.from(process.env.YTDLP_COOKIES_BASE64, "base64").toString("utf-8");
+  const decoded = Buffer.from(
+    process.env.YTDLP_COOKIES_BASE64,
+    "base64"
+  ).toString("utf-8");
   const tmpPath = "/tmp/youtube_cookies.txt";
   fs.writeFileSync(tmpPath, decoded);
   YT_COOKIES_PATH = tmpPath;
@@ -96,63 +101,44 @@ app.post(
   }
 );
 app.post("/download", async (req, res) => {
-  try {
-    const videoUrl = req.body.video_url;
+  let fileUrl;
+  const options = {
+    method: "GET",
+    url: "https://youtube-mp36.p.rapidapi.com/dl",
+    params: { id: "UxxajLWwzqY" },
+    headers: {
+      "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944",
+      "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
+    },
+  };
 
-    if (!videoUrl) {
-      return res.status(400).json({ error: "Missing video_url in body" });
+  async function fetchData() {
+    try {
+      const response = await axios.request(options);
+      fileUrl = response.data.link;
+      console.log(response.data);
+    } catch (error) {
+      console.error(error);
     }
-
-    const tempDir = path.join("/tmp", "downloads", uuidv4());
-    fs.mkdirSync(tempDir, { recursive: true });
-    const outputFile = path.join(tempDir, "audio.mp3");
-
-    const args = [];
-
-    if (YT_COOKIES_PATH) {
-      args.push("--cookies", YT_COOKIES_PATH);
-    }
-
-    args.push("-x", "--audio-format", "mp3", "-o", `${tempDir}/audio.%(ext)s`, videoUrl);
-
-    const ytdlp = spawn("yt-dlp", args);
-
-    ytdlp.stderr.on("data", (data) => {
-      console.error(`yt-dlp stderr: ${data}`);
-    });
-
-    ytdlp.on("error", (err) => {
-      console.error("yt-dlp failed to start:", err);
-      return res.status(500).json({ error: "yt-dlp process failed to start" });
-    });
-
-    ytdlp.on("close", (code) => {
-      if (code !== 0) {
-        return res.status(500).json({ error: "yt-dlp failed to download audio" });
-      }
-
-      fs.readFile(outputFile, (err, data) => {
-        if (err) {
-          console.error("Failed to read the audio file:", err);
-          return res.status(500).send("Failed to read audio file");
-        }
-
-        res.setHeader("Content-Type", "audio/mpeg");
-        res.setHeader("Content-Disposition", "attachment; filename=audio.mp3");
-        res.send(data);
-
-        // Clean up temp directory
-        fs.rm(tempDir, { recursive: true, force: true }, (cleanupErr) => {
-          if (cleanupErr) {
-            console.error("Cleanup error:", cleanupErr);
-          }
-        });
-      });
-    });
-  } catch (e) {
-    console.error("Unexpected server error:", e);
-    return res.status(500).json({ error: "Unexpected server error" });
   }
+
+  await fetchData();
+  const response = await axios.get(fileUrl, {
+      responseType: 'arraybuffer',
+    });
+
+    const mimeType = response.headers['content-type'] || 'audio/mpeg';
+    const base64Audio = Buffer.from(response.data, 'binary').toString('base64');
+
+    // Create a data URI (optional)
+    const dataUri = `data:${mimeType};base64,${base64Audio}`;
+
+    res.json({
+      mimeType,
+      base64: base64Audio,
+      dataUri, // optional: useful if you want to use it in an <audio> tag
+    });
+    return res
 });
 
 app.post("/postTest", (req, res) => {
