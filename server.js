@@ -15,7 +15,7 @@ const stream = require("stream");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.json({ limit: '100mb' })); // Handle large base64 audio & subtitle input
+app.use(express.json({ limit: "100mb" })); // Handle large base64 audio & subtitle input
 
 // Multer setup to store files in a temporary UUID-based directory
 const TEMP_ROOT = "/tmp";
@@ -89,11 +89,11 @@ app.post(
 app.post("/download", async (req, res) => {
   try {
     console.log("Calling RapidAPI to get download link...");
-    
+
     const options = {
       method: "GET",
       url: "https://youtube-mp36.p.rapidapi.com/dl",
-      params: { id: "UxxajLWwzqY" },
+      params: { id: req.id },
       headers: {
         "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944", // Use env variable
         "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
@@ -102,33 +102,7 @@ app.post("/download", async (req, res) => {
     };
 
     const apiResponse = await axios.request(options);
-    const fileUrl = apiResponse.data.link;
-
-    if (!fileUrl) {
-      console.error("No file URL returned from RapidAPI");
-      return res.status(500).json({ error: "No file URL returned from API" });
-    }
-
-    console.log("Fetching audio file from:", fileUrl);
-
-    const audioResponse = await axios.get(fileUrl, {
-      responseType: "arraybuffer",
-      timeout: 20000, // 20 seconds max
-      headers: {
-    "User-Agent": "Mozilla/5.0", // mimic browser
-  },
-    });
-
-    const mimeType = audioResponse.headers["content-type"] || "audio/mpeg";
-    const base64Audio = Buffer.from(audioResponse.data, "binary").toString("base64");
-    const dataUri = `data:${mimeType};base64,${base64Audio}`;
-
-    res.json({
-      mimeType,
-      base64: base64Audio,
-      dataUri, // optional
-    });
-
+    return apiResponse.data.link;
   } catch (error) {
     console.error("Error in /download:", error.message);
     res.status(500).json({
@@ -137,44 +111,73 @@ app.post("/download", async (req, res) => {
     });
   }
 });
+app.get("/audiob64", async (req, res) => {
+  const fileUrl = req.link;
 
-app.post('/create-video', async (req, res) => {
+  if (!fileUrl) {
+    console.error("No file URL returned from RapidAPI");
+    return res.status(500).json({ error: "No file URL returned from API" });
+  }
+
+  console.log("Fetching audio file from:", fileUrl);
+
+  const audioResponse = await axios.get(fileUrl, {
+    responseType: "arraybuffer",
+    timeout: 20000, // 20 seconds max
+    headers: {
+      "User-Agent": "Mozilla/5.0", // mimic browser
+    },
+  });
+
+  const mimeType = audioResponse.headers["content-type"] || "audio/mpeg";
+  const base64Audio = Buffer.from(audioResponse.data, "binary").toString(
+    "base64"
+  );
+  const dataUri = `data:${mimeType};base64,${base64Audio}`;
+
+  res.json({
+    mimeType,
+    base64: base64Audio,
+    dataUri, // optional
+  });
+});
+app.post("/create-video", async (req, res) => {
   try {
     const { audio, subtitles } = req.body;
 
     if (!audio || !subtitles) {
-      return res.status(400).json({ error: 'Missing audio or subtitles' });
+      return res.status(400).json({ error: "Missing audio or subtitles" });
     }
 
     // Save audio to file
     const audioPath = `uploads/audio_${Date.now()}.mp3`;
-    const audioBuffer = Buffer.from(audio, 'base64');
+    const audioBuffer = Buffer.from(audio, "base64");
     fs.writeFileSync(audioPath, audioBuffer);
 
     // Save subtitles to .srt file
     const subtitlePath = `uploads/subs_${Date.now()}.srt`;
-    fs.writeFileSync(subtitlePath, subtitles.replace(/\\n/g, '\n'));
+    fs.writeFileSync(subtitlePath, subtitles.replace(/\\n/g, "\n"));
 
     // Define output path
     const outputPath = `uploads/output_${Date.now()}.mp4`;
 
     // Use FFmpeg to generate video
     ffmpeg()
-      .input('color=black:s=1280x720:d=600') // Adjust d=600 or use -shortest to clip to audio length
-      .inputFormat('lavfi')
+      .input("color=black:s=1280x720:d=600") // Adjust d=600 or use -shortest to clip to audio length
+      .inputFormat("lavfi")
       .input(audioPath)
       .input(subtitlePath)
       .complexFilter([
         {
-          filter: 'subtitles',
+          filter: "subtitles",
           options: subtitlePath,
         },
       ])
-      .outputOptions('-shortest') // Trim video to shortest input
+      .outputOptions("-shortest") // Trim video to shortest input
       .output(outputPath)
-      .on('end', () => {
+      .on("end", () => {
         const videoBuffer = fs.readFileSync(outputPath);
-        const videoBase64 = videoBuffer.toString('base64');
+        const videoBase64 = videoBuffer.toString("base64");
 
         // Clean up
         fs.unlinkSync(audioPath);
@@ -183,14 +186,14 @@ app.post('/create-video', async (req, res) => {
 
         res.json({ video: videoBase64 });
       })
-      .on('error', (err) => {
-        console.error('FFmpeg error:', err);
-        res.status(500).json({ error: 'Video creation failed' });
+      .on("error", (err) => {
+        console.error("FFmpeg error:", err);
+        res.status(500).json({ error: "Video creation failed" });
       })
       .run();
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Unexpected server error' });
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Unexpected server error" });
   }
 });
 
