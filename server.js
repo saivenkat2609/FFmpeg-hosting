@@ -95,7 +95,7 @@ app.post("/download", async (req, res) => {
       url: "https://youtube-mp36.p.rapidapi.com/dl",
       params: { id: "UxxajLWwzqY" },
       headers: {
-        "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944",
+        "x-rapidapi-key": "364b17fb2fmsheca1db02dc1b4ddp19f21fjsn9a4a1ee0f944", // Use env variable
         "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
       },
       timeout: 10000, // 10 seconds
@@ -114,6 +114,9 @@ app.post("/download", async (req, res) => {
     const audioResponse = await axios.get(fileUrl, {
       responseType: "arraybuffer",
       timeout: 20000, // 20 seconds max
+      headers: {
+    "User-Agent": "Mozilla/5.0", // mimic browser
+  },
     });
 
     const mimeType = audioResponse.headers["content-type"] || "audio/mpeg";
