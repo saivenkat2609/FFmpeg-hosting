@@ -1,13 +1,13 @@
 // server.js
 const express = require("express");
 const multer = require("multer");
+const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 const bodyParser = require("body-parser");
-const { Base64Encode } = require("base64-stream");
-const { PassThrough } = require("stream");
+
 const PORT = 3000;
 const axios = require("axios");
 const cors = require("cors");
@@ -122,60 +122,55 @@ app.post("/audiob64", async (req, res) => {
   }
 
   try {
-    const response = await axios({
-      method: "get",
-      url: fileUrl,
-      responseType: "stream",
-      timeout: 20000,
-      headers: {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8",
-        "Sec-CH-UA": '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="99"',
-        "Sec-CH-UA-Mobile": "?0",
-        "Sec-CH-UA-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Upgrade-Insecure-Requests": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
-        "Referer": "https://beta.123tokyo.xyz/",
-        "Origin": "https://beta.123tokyo.xyz"
-      }
+    const browser = await puppeteer.launch({
+      headless: "new", // headless mode for stealth
     });
 
-    const mimeType = response.headers["content-type"] || "audio/mpeg";
+    const page = await browser.newPage();
+    const client = await page.target().createCDPSession();
 
-    const base64Stream = new Base64Encode();
-    let base64Data = "";
-    const pass = new PassThrough();
-
-    pass.on("data", (chunk) => {
-      base64Data += chunk.toString();
+    // Enable downloads in Puppeteer
+    const downloadPath = path.resolve(__dirname, "downloads");
+    fs.mkdirSync(downloadPath, { recursive: true });
+    await client.send("Page.setDownloadBehavior", {
+      behavior: "allow",
+      downloadPath,
     });
 
-    pass.on("end", () => {
-      res.json({
-        mimeType,
-        base64: base64Data,
-        dataUri: `data:${mimeType};base64,${base64Data}`,
-      });
-    });
+    // Go to the file URL
+    await page.goto(fileUrl, { waitUntil: "networkidle2", timeout: 30000 });
 
-    response.data.pipe(base64Stream).pipe(pass);
-  } catch (err) {
-    console.error("Streaming error:", err.message);
-    if (err.response) {
-      console.error("Status:", err.response.status);
-      console.error("Headers:", err.response.headers);
-      console.error("Data:", err.response.data);
+    // Wait a bit to ensure file is downloaded
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Get the downloaded file name
+    const files = fs.readdirSync(downloadPath);
+    const audioFile = files.find((f) => f.endsWith(".mp3"));
+    if (!audioFile) {
+      await browser.close();
+      return res.status(500).json({ error: "Download failed or not an MP3" });
     }
-    return res.status(500).json({ error: "Failed to fetch and stream audio" });
+
+    // Read and convert to base64
+    const filePath = path.join(downloadPath, audioFile);
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Data = fileBuffer.toString("base64");
+
+    await browser.close();
+
+    // Optionally clean up
+    fs.unlinkSync(filePath);
+
+    res.json({
+      mimeType: "audio/mpeg",
+      base64: base64Data,
+      dataUri: `data:audio/mpeg;base64,${base64Data}`,
+    });
+  } catch (err) {
+    console.error("Puppeteer error:", err.message);
+    res.status(500).json({ error: "Failed to download via browser" });
   }
 });
-
-
 
 app.post("/create-video", async (req, res) => {
   try {
