@@ -128,20 +128,26 @@ app.post("/audiob64", async (req, res) => {
       responseType: "stream",
       timeout: 20000,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        Referer: "https://123tokyo.xyz", // guess based on domain
-        Origin: "https://123tokyo.xyz",
-      },
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8",
+        "Sec-CH-UA": '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="99"',
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
+        "Referer": "https://beta.123tokyo.xyz/",
+        "Origin": "https://beta.123tokyo.xyz"
+      }
     });
 
     const mimeType = response.headers["content-type"] || "audio/mpeg";
 
-    // Create a stream that converts binary to base64
     const base64Stream = new Base64Encode();
-
     let base64Data = "";
     const pass = new PassThrough();
 
@@ -157,7 +163,6 @@ app.post("/audiob64", async (req, res) => {
       });
     });
 
-    // Pipe the response stream through base64 encoder into collector
     response.data.pipe(base64Stream).pipe(pass);
   } catch (err) {
     console.error("Streaming error:", err.message);
@@ -169,6 +174,8 @@ app.post("/audiob64", async (req, res) => {
     return res.status(500).json({ error: "Failed to fetch and stream audio" });
   }
 });
+
+
 
 app.post("/create-video", async (req, res) => {
   try {
