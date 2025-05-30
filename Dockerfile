@@ -1,28 +1,24 @@
-FROM node:18
+FROM node:18-slim
 
-# Install system dependencies and yt-dlp
+# Install ffmpeg, yt-dlp, bash, python
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ffmpeg \
-        curl \
-        ca-certificates && \
-    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
-    chmod a+rx /usr/local/bin/yt-dlp && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y ffmpeg curl bash python3 python3-pip && \
+    pip3 install yt-dlp && \
+    npm install -g n8n
 
-# Create app directory
-WORKDIR /app
+# Create working dir
+RUN mkdir -p /home/node/.n8n
+WORKDIR /home/node/
 
-# Copy and install Node.js dependencies
-COPY package*.json ./
-RUN npm ci --omit=dev
+# Set env to avoid issues
+ENV N8N_BASIC_AUTH_ACTIVE=true
+ENV N8N_BASIC_AUTH_USER=admin
+ENV N8N_BASIC_AUTH_PASSWORD=password
+ENV GENERIC_TIMEZONE=Asia/Kolkata
+ENV NODE_ENV=production
 
-# Copy rest of the app
-COPY . .
-# After copying source files
+# Expose port
+EXPOSE 5678
 
-# Expose the app port
-EXPOSE 3000
-
-# Start the app
-CMD ["npm", "start"]
+# Start n8n
+CMD ["n8n"]
