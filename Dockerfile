@@ -13,8 +13,9 @@ RUN apt-get update && \
         python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp using pip
-RUN pip3 install yt-dlp
+# Download and install yt-dlp binary
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp
 
 # Install n8n globally
 RUN npm install -g n8n
